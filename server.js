@@ -4,6 +4,7 @@ import path from 'path';
 import { User } from './Models/userModel.js';
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
+import bcrypt from 'bcryptjs';
 
 cloudinary.config({
   cloud_name: 'dnvtxuawy',
@@ -35,6 +36,9 @@ app.get('/register', (req, res) => {
 app.post('/register', upload.single('file'), async (req, res) => {
   const { name, email, password } = req.body;
 
+  const hashedPassword = await bcrypt.hash(password, 10); // Use a higher salt round for better security
+
+
   try {
     if (!req.file) {
       return res.status(400).send('File not uploaded');
@@ -44,7 +48,7 @@ app.post('/register', upload.single('file'), async (req, res) => {
     let newUser = new User({
       name: name,
       email: email,
-      password: password,
+      password: hashedPassword,
       profilePic: result.secure_url,
     });
     
@@ -80,25 +84,36 @@ app.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    let user = await User.findOne({ email});
-    console.log("user found", user);
+    // Debugging: Check incoming request data
+    console.log('Login attempt:', { email, password });
 
+    // Check if the user exists
+    const user = await User.findOne({ email });
     if (!user) {
-      res.render('login.ejs', { error: 'User not found' });
-      // return res.status(400).send('User not found');
+      console.log('User not found');
+      return res.render('login.ejs', { error: 'User not found' });
     }
-    else if(user.password !== password){
-      res.render('login.ejs', { error: 'Password incorrect' });
+
+    console.log('User found:', user);
+
+    // Validate password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    console.log('Password validation result:', isPasswordValid);
+
+    if (!isPasswordValid) {
+      console.log('Incorrect password');
+      return res.render('login.ejs', { error: 'Incorrect password' });
     }
-    else{
-      res.render('profile.ejs', { user: user });
-  }
-}
-  catch (err) {
-    console.error('Error in user login:', err);
-    res.status(500).render('login', { error: 'User login failed' });
+
+    // Successful login
+    console.log('Login successful for user:', user.email);
+    res.render('profile.ejs', { user });
+  } catch (err) {
+    console.error('Error during user login:', err);
+    res.status(500).render('login.ejs', { error: 'An unexpected error occurred. Please try again later.' });
   }
 });
+
 
 // Connect to MongoDB
 mongoose.connect('mongodb+srv://rijim843:secjim1234@cluster0.dyxt0.mongodb.net/', {
